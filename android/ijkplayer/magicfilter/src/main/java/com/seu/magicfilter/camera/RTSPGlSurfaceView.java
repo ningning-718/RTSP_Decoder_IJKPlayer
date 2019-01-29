@@ -16,6 +16,7 @@ import com.seu.magicfilter.camera.interfaces.OnRecordListener;
 import com.seu.magicfilter.camera.interfaces.OnSwitchCameraListener;
 import com.seu.magicfilter.filter.base.MagicCameraInputFilter;
 import com.seu.magicfilter.filter.base.MagicRecordFilter;
+import com.seu.magicfilter.filter.helper.MagicFilterType;
 import com.seu.magicfilter.utils.OpenGlUtils;
 import com.seu.magicfilter.utils.TextureRotationUtil;
 
@@ -31,11 +32,9 @@ import javax.microedition.khronos.opengles.GL10;
  *
  * @author Created by jz on 2017/5/2 11:21
  */
-public class CameraGlSurfaceView extends BaseGlSurfaceView implements GLSurfaceView.Renderer,
-        SensorHelper.OnSensorListener,
-        Camera.AutoFocusCallback {
+public class RTSPGlSurfaceView extends BaseGlSurfaceView implements GLSurfaceView.Renderer{
 
-    public static final String TAG = "CameraGlSurfaceView";
+    public static final String TAG = "RTSPGlSurfaceView";
     public static final int RECORD_WIDTH = 480, RECORD_HEIGHT = 640;
 
     private final FloatBuffer mRecordCubeBuffer;//顶点坐标
@@ -45,26 +44,17 @@ public class CameraGlSurfaceView extends BaseGlSurfaceView implements GLSurfaceV
     private MagicRecordFilter mRecordFilter;//绘制到FBO
     private SurfaceTexture mSurfaceTexture;//surface纹理
 
-    private CameraHelper mCameraHelper;
-
-    private SensorHelper mSensorHelper;
-    private int mOrientation;
-    private boolean mIsInversion;
-
     private ThreadHelper mThreadHelper;
 
-    private OnFocusListener mOnFocusListener;
     private OnRecordListener mOnRecordListener;
 
-    public CameraGlSurfaceView(Context context) {
+    public RTSPGlSurfaceView(Context context) {
         this(context, null);
     }
 
-    public CameraGlSurfaceView(Context context, AttributeSet attrs) {
+    public RTSPGlSurfaceView(Context context, AttributeSet attrs) {
         super(context, attrs);
 
-        mCameraHelper = new CameraHelper();
-        mSensorHelper = new SensorHelper(context, this);
         mThreadHelper = new ThreadHelper();
 
         mScaleType = CENTER_CROP;
@@ -76,7 +66,13 @@ public class CameraGlSurfaceView extends BaseGlSurfaceView implements GLSurfaceV
                 .order(ByteOrder.nativeOrder())
                 .asFloatBuffer();
     }
-
+    public SurfaceTexture getSurfaceTexture(){
+        return mSurfaceTexture;
+    }
+    public void setVideoSize(int videoWidth, int videoHeight){
+        mPreviewWidth = videoWidth;
+        mPreviewHeight = videoHeight;
+    }
     @Override
     public void onSurfaceCreated(GL10 gl, EGLConfig config) {
         super.onSurfaceCreated(gl, config);
@@ -104,19 +100,22 @@ public class CameraGlSurfaceView extends BaseGlSurfaceView implements GLSurfaceV
                 });
             }
         }
-        mCameraHelper.startPreview(mSurfaceTexture);
+
+        this.setFilter(MagicFilterType.NONE);
+        //mCameraHelper.startPreview(mSurfaceTexture);
     }
 
     @Override
     public void onSurfaceChanged(GL10 gl, int width, int height) {
         super.onSurfaceChanged(gl, width, height);
+        Log.d(TAG,"GL onSurfaceChanged");
 
-        CameraHelper.CameraItem info = mCameraHelper.getCameraAngleInfo();
-        adjustSize(info.orientation, info.isFront, !info.isFront);
+        //CameraHelper.CameraItem info = mCameraHelper.getCameraAngleInfo();
+        adjustSize(0, true, false);
 
         //重新计算录制顶点、纹理坐标
-        float[][] data = adjustSize(mRecordWidth, mRecordHeight, info.orientation,
-                info.isFront, !info.isFront);
+        float[][] data = adjustSize(mRecordWidth, mRecordHeight, 0,
+                true, false);
         mRecordCubeBuffer.clear();
         mRecordCubeBuffer.put(data[0]).position(0);
         mRecordTextureBuffer.clear();
@@ -158,40 +157,6 @@ public class CameraGlSurfaceView extends BaseGlSurfaceView implements GLSurfaceV
         mRecordFilter.onDisplaySizeChanged(mSurfaceWidth, mSurfaceHeight);
     }
 
-    @Override
-    public void onSensor(int orientation, boolean isInversion) {
-        mOrientation = orientation;
-        mIsInversion = isInversion;
-    }
-
-    @Override
-    public void onAutoFocus(boolean success, Camera camera) {
-        if (mOnFocusListener != null)
-            mOnFocusListener.onFocusEnd();
-    }
-
-    @Override
-    public boolean onTouchEvent(MotionEvent event) {
-        if (event.getAction() == MotionEvent.ACTION_DOWN && mSurfaceWidth > 0 && mSurfaceHeight > 0) {
-            int x = (int) event.getX();
-            int y = (int) event.getY();
-            if (mOnFocusListener != null)
-                mOnFocusListener.onFocusStart(x, y);
-            int centerX = (x - mSurfaceWidth / 2) * 1000 / (mSurfaceWidth / 2);
-            int centerY = (y - mSurfaceHeight / 2) * 1000 / (mSurfaceHeight / 2);
-            mCameraHelper.selectCameraFocus(new Rect(centerX - 100, centerY - 100, centerX + 100, centerY + 100), this);
-        }
-        return true;
-    }
-
-    //调整view大小
-    private void review() {
-        mPreviewWidth = mCameraHelper.getPreviewWidth();
-        mPreviewHeight = mCameraHelper.getPreviewHeight();
-        mRecordWidth = mCameraHelper.getRecordWidth();
-        mRecordHeight = mCameraHelper.getRecordHeight();
-    }
-
     /**
      * 开始录制
      */
@@ -214,6 +179,7 @@ public class CameraGlSurfaceView extends BaseGlSurfaceView implements GLSurfaceV
      * 恢复摄像头，对应Activity生命周期
      */
     public void resume() {
+        /*
         boolean rel = mCameraHelper.openCamera();
         if (rel) {
             review();
@@ -222,21 +188,22 @@ public class CameraGlSurfaceView extends BaseGlSurfaceView implements GLSurfaceV
         } else {
             mThreadHelper.sendError("摄像头开启失败，请检查是否被占用！");
         }
+        */
     }
 
     /**
      * 暂停摄像头，对应Activity生命周期
      */
     public void pause() {
-        mCameraHelper.stopCamera();
+        //mCameraHelper.stopCamera();
     }
 
     /**
      * 停止摄像头，对应Activity的onDestroy
      */
     public void stop() {
-        mCameraHelper.stopCamera();
-        mSensorHelper.release();
+        //mCameraHelper.stopCamera();
+        //mSensorHelper.release();
 
         mFilter.destroy();
         mCameraInputFilter.destroy();
@@ -244,52 +211,24 @@ public class CameraGlSurfaceView extends BaseGlSurfaceView implements GLSurfaceV
     }
 
     /**
-     * 切换前后摄像头
-     */
-    public void switchCamera(OnSwitchCameraListener l) {
-        mThreadHelper.setOnSwitchCameraListener(l);
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                boolean rel = mCameraHelper.switchCamera();
-                mThreadHelper.sendSwitchCamera(rel, "切换摄像头失败，请检查是否被占用！");
-            }
-        }).start();
-    }
-
-    /**
-     * 获得摄像头
-     */
-    public CameraHelper getCamera() {
-        return mCameraHelper;
-    }
-
-    /**
-     * 获得摄像头数量
-     */
-    public int getCameraCount() {
-        return Camera.getNumberOfCameras();
-    }
-
-    /**
      * 是否横屏
      */
     public int getOrientation() {
-        return mOrientation;
+        return 0;
     }
 
     /**
      * 是否倒置
      */
     public boolean isInversion() {
-        return mIsInversion;
+        return false;
     }
 
     /**
      * 当前是否前置摄像头
      */
     public boolean isFrontCamera() {
-        return mCameraHelper.isFrontCamera();
+        return true;
     }
 
     /**
@@ -317,16 +256,6 @@ public class CameraGlSurfaceView extends BaseGlSurfaceView implements GLSurfaceV
         }
         this.mOnRecordListener = l;
     }
-
-    /**
-     * 设置摄像头焦点回调
-     *
-     * @param l 回调
-     */
-    public void setOnFocusListener(OnFocusListener l) {
-        this.mOnFocusListener = l;
-    }
-
 
     /**
      * 设置错误回调
