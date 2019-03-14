@@ -948,9 +948,9 @@ public class TextureRenderView extends GLTextureView implements IRenderView {
 
         cavas.drawBitmap(source, matrix, paint);
 
-        if (source != null && !source.isRecycled()) {
-            source.recycle();
-        }
+        //if (source != null && !source.isRecycled()) {
+        //    source.recycle();
+        //}
 
         return resultBitmap;
     }
