@@ -13,6 +13,9 @@ android {
                         '-DANDROID_STL=stlport_static'
             }
         }
+        ndk {
+            abiFilters 'armeabi-v7a'
+        }
     }
 
     externalNativeBuild {
