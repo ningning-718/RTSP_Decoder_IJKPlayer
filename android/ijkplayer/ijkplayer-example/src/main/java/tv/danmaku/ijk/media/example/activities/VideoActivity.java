@@ -23,6 +23,7 @@ import android.app.TaskStackBuilder;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
@@ -38,10 +39,19 @@ import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.ViewGroup;
+import android.widget.ImageView;
 import android.widget.TableLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.google.zxing.BarcodeFormat;
+import com.google.zxing.MultiFormatWriter;
+import com.google.zxing.WriterException;
+import com.google.zxing.common.BitMatrix;
+
+import java.net.NetworkInterface;
+import java.util.Collections;
+import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
 
@@ -54,6 +64,9 @@ import tv.danmaku.ijk.media.example.fragments.TracksFragment;
 import tv.danmaku.ijk.media.example.widget.media.AndroidMediaController;
 import tv.danmaku.ijk.media.example.widget.media.IjkVideoView;
 import tv.danmaku.ijk.media.example.widget.media.MeasureHelper;
+
+import static android.graphics.Color.BLACK;
+import static android.graphics.Color.WHITE;
 
 public class VideoActivity extends AppCompatActivity implements TracksFragment.ITrackHolder {
     private static final String TAG = "VideoActivity";
@@ -187,6 +200,18 @@ public class VideoActivity extends AppCompatActivity implements TracksFragment.I
         IjkMediaPlayer.native_profileBegin("libijkplayer.so");
 
         mVideoView = (IjkVideoView) findViewById(R.id.video_view);
+
+        ImageView imageView =  findViewById(R.id.qr_view);
+        try {
+            // generate a 150x150 QR code
+            Bitmap bm = encodeAsBitmap(getUniqueSerialNO(), 150, 150);
+
+            if(bm != null) {
+                imageView.setImageBitmap(bm);
+            }
+        } catch (WriterException e) {
+            e.printStackTrace();
+        }
         mVideoView.setMediaController(mMediaController);
         mVideoView.setHudView(mHudView);
 
@@ -228,6 +253,68 @@ public class VideoActivity extends AppCompatActivity implements TracksFragment.I
         }, 20000, 10000);
     }
 
+    Bitmap encodeAsBitmap(String str,int width,int height) throws WriterException {
+        BitMatrix result;
+        try {
+            result = new MultiFormatWriter().encode(str,
+                    BarcodeFormat.QR_CODE, width, height, null);
+        } catch (IllegalArgumentException iae) {
+            // Unsupported format
+            return null;
+        }
+        int w = result.getWidth();
+        int h = result.getHeight();
+        int[] pixels = new int[w * h];
+        for (int y = 0; y < h; y++) {
+            int offset = y * w;
+            for (int x = 0; x < w; x++) {
+                pixels[offset + x] = result.get(x, y) ? BLACK : WHITE;
+            }
+        }
+        Bitmap bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        bitmap.setPixels(pixels, 0, width, 0, 0, w, h);
+        return bitmap;
+    }
+    private static String getMacAddr() {
+        try {
+            List<NetworkInterface> all = Collections.list(NetworkInterface.getNetworkInterfaces());
+            for (NetworkInterface nif : all) {
+                if ( !nif.getName().equalsIgnoreCase("eth0") &&
+                        !nif.getName().equalsIgnoreCase("wlan0")) continue;
+
+                byte[] macBytes = nif.getHardwareAddress();
+                if (macBytes == null) {
+                    return "";
+                }
+
+                StringBuilder res1 = new StringBuilder();
+                for (byte b : macBytes) {
+                    // res1.append(Integer.toHexString(b & 0xFF) + ":");
+                    res1.append(String.format("%02X",b));
+                }
+
+                //if (res1.length() > 0) {
+                //    res1.deleteCharAt(res1.length() - 1);
+                //}
+                return res1.toString();
+            }
+        } catch (Exception ex) {
+            //handle exception
+        }
+        return "";
+    }
+    private String getUniqueSerialNO(){
+        String UDID = getMacAddr();
+        if (UDID == null || UDID.length() == 0) {
+            UDID = android.provider.Settings.Secure.getString(this.getContentResolver(),
+                    android.provider.Settings.Secure.ANDROID_ID);
+        }
+        if (UDID == null || UDID.length() == 0) {
+            UDID = "0000000";
+        }
+
+        return UDID.toLowerCase();
+    }
     @Override
     public void onBackPressed() {
         mBackPressed = true;
