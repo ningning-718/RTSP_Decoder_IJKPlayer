@@ -110,6 +110,10 @@ public class SetupActivity extends AppCompatActivity {
                 //msg.obj = temp;
                 //mHandler.sendMessage(msg);
                 if(SN.equals(savedSN)){
+                    SharedPreferences sp = getSharedPreferences(CameraScanActivity.CAMERAIPKEY, Context.MODE_PRIVATE);
+                    SharedPreferences.Editor editor = sp.edit();
+                    editor.putString("videoIP", ipaddress);
+                    editor.commit();
                     String videoUrl = "rtsp://"+getSavedUsername()+":"+getSavedPassword()+"@"+ipaddress+":554/cam/realmonitor?channel=1&subtype=0";
                     mConnectedToCamera = true;
                     VideoActivity.intentTo(mContext, videoUrl);
