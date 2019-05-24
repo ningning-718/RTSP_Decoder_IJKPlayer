@@ -31,6 +31,7 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.os.Message;
 import android.support.v7.app.AppCompatActivity;
+import android.text.TextUtils;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
@@ -135,10 +136,35 @@ public class SetupActivity extends AppCompatActivity {
         //final Button button = (Button) findViewById(R.id.button);
         mContext = this;
         ensureStoragePermissionGranted();
+
         /// Initializing the NetSDKLib is important and necessary to ensure that
         /// all the APIs of INetSDK.jar are effective.
         /// 注意: 必须调用 init 接口初始化 INetSDK.jar 仅需要一次初始化
         NetSDKLib.getInstance().init();
+
+        Intent intent = getIntent();
+        String dataStr = intent.getStringExtra("rtsp");
+        if (!TextUtils.isEmpty(dataStr)) {
+            SharedPreferences.Editor editor = mSharedPreferences.edit();
+            editor.putString("rtspurl", dataStr);
+            editor.commit();
+            Log.w("##RDBG", "RTSP: " + dataStr);
+            mConnectedToCamera = true;
+            VideoActivity.intentTo(mContext, dataStr);
+            finish();
+            //System.exit(0);
+            return;
+        }
+
+        String rtsp = mSharedPreferences.getString("rtspurl", null);
+        if (!TextUtils.isEmpty(rtsp)) {
+            Log.w("##RDBG", "RTSP: " + rtsp);
+            mConnectedToCamera = true;
+            VideoActivity.intentTo(mContext, rtsp);
+            finish();
+            //System.exit(0);
+            return;
+        }
 
         // Open sdk log
         final String file = new String(Environment.getExternalStorageDirectory().getPath() + "/sdk_log.log");
