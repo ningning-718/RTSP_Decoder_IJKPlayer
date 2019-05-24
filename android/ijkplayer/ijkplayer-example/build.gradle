@@ -85,53 +85,73 @@ dependencies {
     implementation 'com.android.support:support-annotations:27.1.1'
     implementation 'com.google.zxing:core:3.2.0'
     implementation 'org.tensorflow:tensorflow-lite:0.0.0-gpu-experimental'
+
     //implementation 'nl.bravobit:android-ffmpeg:1.1.5'
     implementation 'com.arthenica:mobile-ffmpeg-full-gpl:3.1'
+
     //implementation 'com.zolad:videoslimmer:1.0.0'
-
     implementation 'com.squareup:otto:1.3.8'
-
     implementation project(':ijkplayer-java')
-    //implementation project(':ijkplayer-exo')
 
+    //implementation project(':ijkplayer-exo')
     implementation project(':easyrs')
     implementation project(':rembrandtAndroid')
     implementation project(':magicfilter')
     implementation project(':openCVLibrary341')
     implementation project(':nativeLib')
-    //implementation project(':OpenCV3.1')
-    //implementation project(':mp4compose')
 
+    //implementation project(':OpenCV3.1')
+
+    //implementation project(':mp4compose')
     implementation project(':ijkplayer-armv5')
     implementation project(':ijkplayer-armv7a')
     implementation project(':ijkplayer-arm64')
 
     // all32Compile project(':ijkplayer-armv5')
+
     // all32Compile project(':ijkplayer-armv7a')
+
     // all32Compile project(':ijkplayer-x86')
 
     // all64Compile project(':ijkplayer-armv5')
+
     // all64Compile project(':ijkplayer-armv7a')
+
     // all64Compile project(':ijkplayer-arm64')
+
     // all64Compile project(':ijkplayer-x86')
+
     // all64Compile project(':ijkplayer-x86_64')
 
     // compile 'tv.danmaku.ijk.media:ijkplayer-java:0.8.8'
+
     // compile 'tv.danmaku.ijk.media:ijkplayer-exo:0.8.8'
 
     // all32Compile 'tv.danmaku.ijk.media:ijkplayer-armv5:0.8.8'
+
     // all32Compile 'tv.danmaku.ijk.media:ijkplayer-armv7a:0.8.8'
+
     // all32Compile 'tv.danmaku.ijk.media:ijkplayer-x86:0.8.8'
 
     // all64Compile 'tv.danmaku.ijk.media:ijkplayer-armv5:0.8.8'
+
     // all64Compile 'tv.danmaku.ijk.media:ijkplayer-armv7a:0.8.8'
+
     // all64Compile 'tv.danmaku.ijk.media:ijkplayer-arm64:0.8.8'
+
     // all64Compile 'tv.danmaku.ijk.media:ijkplayer-x86:0.8.8'
+
     // all64Compile 'tv.danmaku.ijk.media:ijkplayer-x86_64:0.8.8'
 
     // armv5Compile project(':player-armv5')
+
     // armv7aCompile project(':player-armv7a')
+
     // arm64Compile project(':player-arm64')
+
     // x86Compile project(':player-x86')
+
     // x86_64Compile project(':player-x86_64')
+    implementation project(':libFaceDetection')
+    implementation project(':dlib')
 }

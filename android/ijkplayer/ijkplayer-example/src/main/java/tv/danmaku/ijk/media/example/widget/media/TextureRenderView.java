@@ -54,18 +54,35 @@ import com.mtcnn_as.FaceDetector;
 import com.sharpai.detector.Classifier;
 import com.sharpai.detector.Detector;
 import com.sharpai.pim.MotionDetectionRS;
+import com.tzutalin.dlib.Constants;
+import com.tzutalin.dlib.FaceDet;
+import com.tzutalin.dlib.VisionDetRet;
 //import com.zolad.videoslimmer.VideoSlimmer;
 
+import org.dp.facedetection.Face;
+import org.dp.facedetection.LibFaceDetection;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 import org.opencv.android.OpenCVLoader;
 import org.opencv.android.Utils;
+import org.opencv.core.Core;
 import org.opencv.core.Mat;
+import org.opencv.core.MatOfDouble;
 import org.opencv.core.MatOfPoint;
 import org.opencv.core.Rect;
 import org.opencv.imgproc.Imgproc;
 import org.opencv.video.BackgroundSubtractor;
 import org.opencv.video.Video;
 
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.File;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.UnsupportedEncodingException;
 import java.lang.ref.WeakReference;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -85,6 +102,7 @@ import tv.danmaku.ijk.media.player.ISurfaceTextureHost;
 
 import static com.arthenica.mobileffmpeg.FFmpeg.RETURN_CODE_CANCEL;
 import static com.arthenica.mobileffmpeg.FFmpeg.RETURN_CODE_SUCCESS;
+import static java.lang.Math.abs;
 
 @TargetApi(Build.VERSION_CODES.ICE_CREAM_SANDWICH)
 public class TextureRenderView extends GLTextureView implements IRenderView {
@@ -94,6 +112,7 @@ public class TextureRenderView extends GLTextureView implements IRenderView {
     private Handler mBackgroundHandler;
 
     private static final int PROCESS_SAVED_IMAGE_MSG = 1002;
+    private static final int PROCESS_JSON_ARRAY_MSG = 1003;
     private static final int PROCESS_SAVED_IMAGE_MSG_NOTNOW = 2001;
 
     private int DETECTION_IMAGE_WIDTH = 854;
@@ -104,6 +123,24 @@ public class TextureRenderView extends GLTextureView implements IRenderView {
     private static final int PROCESS_KEEP_ALIVE_MSG = 1004;
 
     private static final int PROCESS_FRAMES_AFTER_MOTION_DETECTED = 3;
+
+    private static final boolean SEND_WITH_FACE_JSON_MESSAGE_TO_DEEPCAMERA = true;
+
+
+    private static final int WHOLE_IMAGE_FOR_GIF_WIDTH = 427;
+    private static final int WHOLE_IMAGE_FOR_GIF_HEIGHT = 240;
+
+    private static final int FACE_SAVING_WIDTH = 112;
+    private static final int FACE_SAVING_HEIGHT = 112;
+
+    private LibFaceDetection mLibFaceDetector;
+
+    private static final int LIB_FACE_DETECTION_MIN_CONFIDENCE = 90;
+    private static final int LIB_FACE_DETECTION_MAX_FRONTAL_ANGLE = 2000;
+
+    private static final boolean SHOW_DETECTED_PERSON_FACE_FOR_DEBUG = true;
+
+    private FaceDet mFaceDet;
 
     private RenderScript mRS = null;
     private MotionDetectionRS mMotionDetection;
@@ -172,7 +209,55 @@ public class TextureRenderView extends GLTextureView implements IRenderView {
         //mMOG2.setHistory(5);
         //mMOG2.setDetectShadows(false);
         //mMOG2.setComplexityReductionThreshold(0);
+
+        if(SHOW_DETECTED_PERSON_FACE_FOR_DEBUG){
+            mFaceDet = new FaceDet(Constants.getFaceShapeModelPath());
+        }
+        mLibFaceDetector = new LibFaceDetection();
     }
+
+    public static String makeRequest(String uri, String json) {
+        HttpURLConnection urlConnection;
+        String url;
+        String data = json;
+        String result = null;
+        try {
+            //Connect
+            urlConnection = (HttpURLConnection) ((new URL(uri).openConnection()));
+            urlConnection.setDoOutput(true);
+            urlConnection.setRequestProperty("Content-Type", "application/json");
+            urlConnection.setRequestProperty("Accept", "application/json");
+            urlConnection.setRequestMethod("POST");
+            urlConnection.connect();
+
+            //Write
+            OutputStream outputStream = urlConnection.getOutputStream();
+            BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(outputStream, "UTF-8"));
+            writer.write(data);
+            writer.close();
+            outputStream.close();
+
+            //Read
+            BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(urlConnection.getInputStream(), "UTF-8"));
+
+            String line = null;
+            StringBuilder sb = new StringBuilder();
+
+            while ((line = bufferedReader.readLine()) != null) {
+                sb.append(line);
+            }
+
+            bufferedReader.close();
+            result = sb.toString();
+
+        } catch (UnsupportedEncodingException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return result;
+    }
+
     class MyCallback implements Handler.Callback {
 
         @Override
@@ -207,6 +292,17 @@ public class TextureRenderView extends GLTextureView implements IRenderView {
                             urlConnection.disconnect();
                              return true;
                         }
+                    }
+                    break;
+                case PROCESS_JSON_ARRAY_MSG:
+                    Log.d(TAG, "Processing message: " + msg.obj);
+                    //String jsonString = (String) msg.obj;
+                    JSONObject json = (JSONObject) msg.obj;
+                    String response = makeRequest("http://127.0.0.1:3000/post2",json.toString());
+                    if(response == null){
+                        Log.d(TAG,"Error of rest post");
+                    } else {
+                        Log.v(TAG,"Response of detector is "+response);
                     }
                     break;
                 case PROCESS_KEEP_ALIVE_MSG:
@@ -700,66 +796,276 @@ public class TextureRenderView extends GLTextureView implements IRenderView {
         VideoActivity.setPixelDiff(diffarea);
         return rects.size()>0;
     }
-    public int doFaceDetectionAndSendTask(List<Classifier.Recognition> result,Bitmap bmp){
+    private RectF getFaceRectF(int []faceInfo){
+
+        int left, top, right, bottom;
+        int i = 0;
+        left = faceInfo[1+14*i];
+        top = faceInfo[2+14*i];
+        right = faceInfo[3+14*i];
+        bottom = faceInfo[4+14*i];
+
+        RectF faceRectf = new RectF(left,top,right,bottom);
+        return faceRectf;
+    }
+    private String calcFaceStyle(int[] faceInfo){
+        int left, top, right, bottom;
+        int i = 0;
+        left = faceInfo[1+14*i];
+        top = faceInfo[2+14*i];
+        right = faceInfo[3+14*i];
+        bottom = faceInfo[4+14*i];
+
+        RectF faceRect = new RectF(left,top,right,bottom);
+        //画特征点
+
+        int[] eye_1 = new int[2];
+        int[] eye_2 = new int[2];
+        eye_1[0] = faceInfo[5+14*i];
+        eye_2[0] = faceInfo[6+14*i];
+        eye_1[1] = faceInfo[10+14*i];
+        eye_2[1] = faceInfo[11+14*i];
+
+        int eye_distance = abs(eye_1[0]-eye_2[0]);
+
+        Rect rect = new Rect(left,top,right,bottom);
+
+        int middle_point = (left + right)/2;
+        int y_middle_point = (top + bottom) / 2;
+
+
+        if (eye_1[0] > middle_point){
+            Log.d(TAG,"(Left Eye on the Right) Add style");
+            return "left_side";
+        }
+        if (eye_2[0] < middle_point){
+            Log.d(TAG,"(Right Eye on the left) Add style");
+            return "right_side";
+        }
+        if (Math.max(eye_1[1], eye_2[1]) > y_middle_point){
+            Log.d(TAG,"(Eye lower than middle of face) Skip");
+            return "lower_head";
+        }
+        if (faceRect.width()/eye_distance > 6){
+            Log.d(TAG,"side_face, eye distance is "+eye_distance+", face width is "+faceRect.width());
+            return "side_face";
+        }
+        //#elif nose[1] < y_middle_point:
+        //#    # 鼻子的y轴高于图片的中间高度，就认为是抬头
+        //#    style.append('raise_head')
+
+        return "front";
+    }
+    private int calcBitmapBlurry(Bitmap bmp){
+        Mat mat = new Mat();
+        Bitmap bmp32 = bmp.copy(Bitmap.Config.ARGB_8888, true);
+        Utils.bitmapToMat(bmp32, mat);
+
+        Mat matGray = new Mat();
+        Mat destination = new Mat();
+
+        Imgproc.cvtColor(mat, matGray, Imgproc.COLOR_BGR2GRAY);
+        Imgproc.Laplacian(matGray, destination, 3);
+        MatOfDouble median = new MatOfDouble();
+        MatOfDouble std = new MatOfDouble();
+        Core.meanStdDev(destination, median, std);
+
+        return (int) Math.pow(std.get(0, 0)[0], 2.0);
+    }
+    public int doFaceDetectionAndSendTask(List<Classifier.Recognition> result, Bitmap bmp) throws Exception {
         long tsStart;
         long tsEnd;
         int face_num = 0;
         String filename = "";
         File file = null;
+        JSONArray detectInfo = new JSONArray();
+        String wholeFilename = null;
+
+        if(SEND_WITH_FACE_JSON_MESSAGE_TO_DEEPCAMERA == true){
+            Bitmap wholeImgForGif = mMotionDetection.resizeBmp(bmp,WHOLE_IMAGE_FOR_GIF_WIDTH,WHOLE_IMAGE_FOR_GIF_HEIGHT);
+            File wholeFile = screenshot.getInstance()
+                    .saveScreenshotToPicturesFolder(mContext, wholeImgForGif, "gif_frame_");
+            wholeFilename = wholeFile.getAbsolutePath();
+        }
 
         for(final Classifier.Recognition recognition:result){
+
             tsStart = System.currentTimeMillis();
+
             RectF rectf = recognition.getLocation();
             Log.d(TAG,"recognition rect: "+rectf.toString());
             Bitmap personBmp = getCropBitmapByCPU(bmp,rectf);
-            int num = mFaceDetector.predict_image(personBmp);
+
+
+            int[] face_info = mFaceDetector.predict_image(personBmp);
             tsEnd = System.currentTimeMillis();
+
             Log.v(TAG,"time diff (FD) "+(tsEnd-tsStart));
+
+            // Start to save person image information
+            JSONObject personInfo = new JSONObject();
+
+            if(SEND_WITH_FACE_JSON_MESSAGE_TO_DEEPCAMERA){
+                personInfo.put("wholeImagePath",wholeFilename);
+            }
+
+            personInfo.put("personWidth",rectf.width());
+            personInfo.put("personHeight",rectf.height());
+            personInfo.put("personLocation",rectf.toShortString());
+            tsStart = System.currentTimeMillis();
+            file = screenshot.getInstance()
+                    .saveScreenshotToPicturesFolder(mContext, personBmp, "person_");
+            filename = file.getAbsolutePath();
+            personInfo.put("personImagePath",filename);
+
+            int num = 0;
+            if(face_info != null && face_info.length > 0){
+                num = face_info[0];
+            }
+            personInfo.put("faceNum",num);
             if(num > 0){
+
+                RectF faceRectF = getFaceRectF(face_info);
+
                 face_num+=num;
-                try {
-                    tsStart = System.currentTimeMillis();
-                    file = screenshot.getInstance()
-                            .saveScreenshotToPicturesFolder(mContext, personBmp, "frame_");
+                Bitmap faceBmp = getCropBitmapByCPU(personBmp,faceRectF);
+                Bitmap resizedBmp = mMotionDetection.resizeBmp(faceBmp,FACE_SAVING_WIDTH,FACE_SAVING_HEIGHT);
 
-                    filename = file.getAbsolutePath();
-                    tsEnd = System.currentTimeMillis();
-                    Log.v(TAG,"time diff (Save) "+(tsEnd-tsStart));
+                tsStart = System.currentTimeMillis();
+                Face[] faces = mLibFaceDetector.Detect(resizedBmp);
 
-                } catch (Exception e) {
-                    e.printStackTrace();
+                String faceStyle = "side_face";
 
-                    //delete all jpg file in Download dir when disk is full
-                    deleteAllCapturedPics();
+                if(faces != null){
+                    Log.d(TAG,"in face: face length "+faces.length);
+                    for(int i=0;i<faces.length;i++){
+                        Face face = faces[i];
+                        Log.d(TAG,"in face: face confidence "+face.faceConfidence +
+                                " angle "+face.faceAngle+" width "+face.faceRect.width+" height "+
+                                face.faceRect.height);
+
+                        if(face.faceConfidence > LIB_FACE_DETECTION_MIN_CONFIDENCE &&
+                                face.faceAngle == 0){
+                            faceStyle = "front";
+                            break;
+                        }
+                    }
                 }
+                tsEnd = System.currentTimeMillis();
+                Log.v(TAG,"time diff (FD libfacedetection in face) "+(tsEnd-tsStart));
+
+
+                if(!faceStyle.equals("front")){
+                    tsStart = System.currentTimeMillis();
+                    List<VisionDetRet> results = mFaceDet.detect(resizedBmp);
+                    if(results.size() != 0){
+                        VisionDetRet ret = results.get(0);
+                        Log.d(TAG,"Face result "+faceRectF+" dlib "+ret);
+                        faceStyle = "front";
+                    }
+                    tsEnd = System.currentTimeMillis();
+                    Log.v(TAG,"time diff (FD Dlib) "+(tsEnd-tsStart));
+                }
+
+                if(faceStyle.equals("front")){
+                    faceStyle = calcFaceStyle(face_info);
+                }
+                Log.d(TAG,"Final face style is "+faceStyle);
+
+                /*if(faceStyle.equals("front")){
+                    mFaceView.setImageBitmap(resizedBmp);
+                }*/
+
+                if(SEND_WITH_FACE_JSON_MESSAGE_TO_DEEPCAMERA == false) {
+                    if (faceStyle.equals("side_face")) {
+                        continue;
+                    }
+                }
+
+                int blurryValue = calcBitmapBlurry(resizedBmp);
+                File faceFile = screenshot.getInstance()
+                        .saveFaceToPicturesFolderWithOpenCV(mContext, resizedBmp, "face_");
+                tsEnd = System.currentTimeMillis();
+                Log.d(TAG,"Blurry value of face is "+blurryValue+", saving face into "+faceFile.getAbsolutePath());
+
+                personInfo.put("faceWidth",faceRectF.width());
+                personInfo.put("faceHeight",faceRectF.height());
+                personInfo.put("faceLocation",faceRectF.toShortString());
+                personInfo.put("faceImagePath",faceFile.getAbsolutePath());
+                personInfo.put("faceStyle",faceStyle);
+                personInfo.put("faceBlurry",blurryValue);
+
                 //bitmap.recycle();
                 //bitmap = null;
-                if(filename.equals("")){
-                    continue;
-                }
-                if(file == null){
-                    continue;
-                }
-
-                mLastTaskSentTimestamp = System.currentTimeMillis();
+            } else if(SEND_WITH_FACE_JSON_MESSAGE_TO_DEEPCAMERA == false) {
+                continue;
+            }
+            Log.v(TAG,"time diff (Save) "+(tsEnd-tsStart));
+            if(filename.equals("")){
+                continue;
+            }
+            if(file == null){
+                continue;
+            }
+            if(SEND_WITH_FACE_JSON_MESSAGE_TO_DEEPCAMERA == false){
                 mBackgroundHandler.obtainMessage(PROCESS_SAVED_IMAGE_MSG, filename).sendToTarget();
             }
+            detectInfo.put(personInfo);
         }
 
-        VideoActivity.setNumberOfFaces(face_num);
+        mLastTaskSentTimestamp = System.currentTimeMillis();
+        if(SEND_WITH_FACE_JSON_MESSAGE_TO_DEEPCAMERA == true){
+            JSONObject finalObject = new JSONObject();
+            finalObject.put("msg", detectInfo);
+            finalObject.put("deviceName", "camera_1");
+            finalObject.put("motion", true);
+            finalObject.put("wholeImagePath", wholeFilename);
+
+            Log.d(TAG,"Detection information: "+finalObject);
+            mBackgroundHandler.obtainMessage(PROCESS_JSON_ARRAY_MSG, finalObject).sendToTarget();
+        }
+
+        //VideoActivity.setNumberOfFaces(face_num);
         return face_num;
     }
-    public void doSendDummyTask(){
-        mBackgroundHandler.obtainMessage(PROCESS_KEEP_ALIVE_MSG).sendToTarget();
+    public void doSendDummyTask(Bitmap bmp){
+        JSONArray detectInfo = new JSONArray();
+        String wholeFilename;
+
+        if(SEND_WITH_FACE_JSON_MESSAGE_TO_DEEPCAMERA == true){
+            Bitmap wholeImgForGif = mMotionDetection.resizeBmp(bmp,WHOLE_IMAGE_FOR_GIF_WIDTH,WHOLE_IMAGE_FOR_GIF_HEIGHT);
+            File wholeFile = null;
+            try {
+                wholeFile = screenshot.getInstance()
+                        .saveScreenshotToPicturesFolder(mContext, wholeImgForGif, "gif_frame_");
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            wholeFilename = wholeFile.getAbsolutePath();
+            JSONObject finalObject = new JSONObject();
+            try {
+                finalObject.put("msg", detectInfo);
+                finalObject.put("deviceName", "camera_1");
+                finalObject.put("motion", true);
+                finalObject.put("wholeImagePath", wholeFilename);
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+
+            Log.d(TAG,"Detection information: "+finalObject);
+            mBackgroundHandler.obtainMessage(PROCESS_JSON_ARRAY_MSG, finalObject).sendToTarget();
+        } else {
+            mBackgroundHandler.obtainMessage(PROCESS_KEEP_ALIVE_MSG).sendToTarget();
+        }
 
         return;
     }
-    private void checkIfNeedSendDummyTask(){
+    private void checkIfNeedSendDummyTask(Bitmap bmp){
 
         long tm = System.currentTimeMillis();
         if (tm - mLastTaskSentTimestamp > 30*1000) {
             mLastTaskSentTimestamp = System.currentTimeMillis();
-            doSendDummyTask();
+            doSendDummyTask(bmp);
             Log.d(TAG,"To send dummy task to keep alive for client status");
         }
 
@@ -793,7 +1099,7 @@ public class TextureRenderView extends GLTextureView implements IRenderView {
                     VideoActivity.setNumberOfFaces(0);
                     boolean ifChanged = detectObjectChanges(bmp);
                     Log.d(TAG,"Object changed after person leaving: "+ifChanged);
-                    checkIfNeedSendDummyTask();
+                    checkIfNeedSendDummyTask(bmp);
                     if(!ifChanged && mRecording){
                         FFmpeg.cancel();
                         String result = FFmpeg.getLastCommandOutput();
@@ -814,7 +1120,10 @@ public class TextureRenderView extends GLTextureView implements IRenderView {
         Log.v(TAG,"time diff (OD) "+(tsEnd-tsStart));
 
         if(personNum>0){
-            doFaceDetectionAndSendTask(result,bmp);
+            try {
+                doFaceDetectionAndSendTask(result,bmp);
+            }
+            catch (Exception ex) {}
             if(mRecording==false){
                 mRecording = true;
                 //"-i", url, "-acodec", "copy", "-vcodec", "copy", targetFile.toString()
@@ -880,7 +1189,7 @@ public class TextureRenderView extends GLTextureView implements IRenderView {
             }
         }
 
-        checkIfNeedSendDummyTask();
+        checkIfNeedSendDummyTask(bmp);
 
         return;
     }
