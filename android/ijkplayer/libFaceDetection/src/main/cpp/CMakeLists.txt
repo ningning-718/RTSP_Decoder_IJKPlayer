@@ -61,7 +61,7 @@ SET_TARGET_PROPERTIES(${fdt_lib_shared} PROPERTIES PREFIX "lib")
 if (ENABLE_OPENCV)
     SET(OpenCV_INCLUDE_DIRS   ${PROJECT_SOURCE_DIR}/opencv2)
     #SET(OpenCV_LIBS   ${PROJECT_SOURCE_DIR}/../jniLibs/${ANDROID_ABI})
-    SET(OpenCV_LIBS "${CMAKE_SOURCE_DIR}/../../../../libFaceDetection/libs/${ANDROID_ABI}")
+    SET(OpenCV_LIBS "${CMAKE_SOURCE_DIR}/../../../../ijkplayer-example/libs/${ANDROID_ABI}")
     #    find_package(OpenCV REQUIRED)
     include_directories(${OpenCV_INCLUDE_DIRS})
 
