@@ -7,6 +7,11 @@ import android.os.Environment;
 import android.view.TextureView;
 import android.view.View;
 
+import org.opencv.android.Utils;
+import org.opencv.core.Mat;
+import org.opencv.imgcodecs.Imgcodecs;
+import org.opencv.imgproc.Imgproc;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.text.SimpleDateFormat;
@@ -118,6 +123,43 @@ public class screenshot {
         return bitmapFile;
     }
 
+    private File getPNGOutputMediaFile(String filename) {
+        // To be safe, you should check that the SDCard is mounted
+        // using Environment.getExternalStorageState() before doing this.
+        File mediaStorageDirectory = new File(
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                        + File.separator);
+        // Create the storage directory if it does not exist
+        if (!mediaStorageDirectory.exists()) {
+            if (!mediaStorageDirectory.mkdirs()) {
+                return null;
+            }
+        }
+        // Create a media file name
+        String timeStamp = new SimpleDateFormat("ddMMyyyy_HHmmss_SSS").format(new Date());
+        File mediaFile;
+        String mImageName = filename + timeStamp + ".png";
+        mediaFile = new File(mediaStorageDirectory.getPath() + File.separator + mImageName);
+        return mediaFile;
+    }
+
+    public File saveFaceToPicturesFolderWithOpenCV(Context context, Bitmap image, String filename)
+            throws Exception {
+        File bitmapFile = getPNGOutputMediaFile(filename);
+        if (bitmapFile == null) {
+            throw new NullPointerException("Error creating media file, check storage permissions!");
+        }
+
+        Mat rgba = new Mat();
+        Utils.bitmapToMat(image, rgba);
+        Mat rgb = new Mat();
+
+        Imgproc.cvtColor(rgba, rgb, Imgproc.COLOR_RGBA2BGR);
+
+        Imgcodecs.imwrite(bitmapFile.getAbsolutePath(),rgb);
+
+        return bitmapFile;
+    }
     private File getOutputMediaFile(String filename) {
         // To be safe, you should check that the SDCard is mounted
         // using Environment.getExternalStorageState() before doing this.
